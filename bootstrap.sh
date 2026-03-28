@@ -172,15 +172,18 @@ test_ssh_connection() {
     ssh_path=$(brew --prefix openssh)/bin/ssh
 
     # Try to connect to GitHub. Exit code 1 is expected for successful auth but no shell.
-    # We use the specific identity file to be sure.
-    if ! "$ssh_path" -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 | grep -q "Hi simonmittag!"; then
+    # We use || true or an if check to ensure the script doesn't exit under set -e
+    info "You might need to touch your YubiKey now..."
+    local ssh_output
+    ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 || true)
+
+    if echo "$ssh_output" | grep -q "Hi simonmittag!"; then
+        success "GitHub SSH connectivity verified."
+    else
         warn "SSH connectivity test to GitHub failed or returned unexpected output."
-        info "Retrying with verbose output... You might need to touch your YubiKey now."
-        if ! "$ssh_path" -vvv -T -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com; then
-            error "Could not verify GitHub SSH access. Please ensure your YubiKey is registered with GitHub and the stub is correct."
-        fi
+        echo "$ssh_output"
+        error "Could not verify GitHub SSH access. Please ensure your YubiKey is registered with GitHub and the stub is correct."
     fi
-    success "GitHub SSH connectivity verified."
 }
 
 # --- 6. chezmoi Initialization ---
