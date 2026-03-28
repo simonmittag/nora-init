@@ -78,7 +78,7 @@ setup_ssh() {
                 if [[ ! -f "$SSH_DIR/$filename" ]]; then
                     cp "$stub" "$SSH_DIR/$filename"
                     chmod 600 "$SSH_DIR/$filename"
-                    info "Installed $filename to $SSH_DIR"
+                    info "Installed $filename to $SSH_DIR with safe permissions"
                 else
                     info "$filename already exists in $SSH_DIR. Skipping."
                 fi
@@ -92,7 +92,7 @@ setup_ssh() {
                 info "Downloading $filename..."
                 if curl -fsSL "$STUB_REPO_URL/$filename" -o "$SSH_DIR/$filename"; then
                     chmod 600 "$SSH_DIR/$filename"
-                    info "Downloaded $filename to $SSH_DIR"
+                    info "Downloaded $filename to $SSH_DIR with safe permissions"
                 else
                     warn "Failed to download $filename from GitHub."
                 fi
@@ -175,8 +175,8 @@ test_ssh_connection() {
     # We use the specific identity file to be sure.
     if ! "$ssh_path" -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 | grep -q "Hi simonmittag!"; then
         warn "SSH connectivity test to GitHub failed or returned unexpected output."
-        info "You might need to touch your YubiKey now for the test connection..."
-        if ! "$ssh_path" -T -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 | grep -q "Hi simonmittag!"; then
+        info "Retrying with verbose output... You might need to touch your YubiKey now."
+        if ! "$ssh_path" -vvv -T -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com; then
             error "Could not verify GitHub SSH access. Please ensure your YubiKey is registered with GitHub and the stub is correct."
         fi
     fi
