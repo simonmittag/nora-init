@@ -1,0 +1,5 @@
+# Ignore local environment specific files
+.DS_Store
+*.swp
+*.swo
+.idea
