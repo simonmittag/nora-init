@@ -86,7 +86,7 @@ setup_ssh() {
         done
     else
         info "Local stubs not found. Attempting to download from GitHub..."
-        local stubs=("id_ed25519_sk" "id_ed25519_sk.pub")
+        local stubs=("id_ed25519_sk_private_a" "id_ed25519_sk_private_a.pub")
         for filename in "${stubs[@]}"; do
             if [[ ! -f "$SSH_DIR/$filename" ]]; then
                 info "Downloading $filename..."
@@ -114,7 +114,7 @@ setup_ssh() {
     done
 
     if [ "$key_found" = false ]; then
-        error "No SSH identity files found in $SSH_DIR. Please place your SSH keys/stubs (e.g., id_ed25519_sk) in $SSH_DIR before running this script."
+        error "No SSH identity files found in $SSH_DIR. Please place your SSH keys/stubs (e.g., id_ed25519_sk_private_a) in $SSH_DIR before running this script."
     fi
 
     # Optional: Manage ~/.ssh/config for GitHub
@@ -125,7 +125,7 @@ setup_ssh() {
 Host github.com
     AddKeysToAgent yes
     UseKeychain yes
-    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/id_ed25519_sk_private_a
 EOF
         chmod 600 "$SSH_DIR/config"
     else
