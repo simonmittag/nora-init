@@ -7,6 +7,7 @@ set -euo pipefail
 
 # --- Configuration ---
 DOTFILES_REPO="git@github.com:simonmittag/dotfiles.git"
+STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/dotfiles-init/main/ssh"
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
 SSH_DIR="$HOME/.ssh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,9 +69,9 @@ setup_ssh() {
     mkdir -p "$SSH_DIR"
     chmod 700 "$SSH_DIR"
 
-    # Install bundled SSH key stubs if they exist in the repository
+    # Install bundled SSH key stubs
     if [[ -d "$SCRIPT_DIR/ssh" ]]; then
-        info "Installing bundled SSH key stubs from repository..."
+        info "Installing bundled SSH key stubs from local repository..."
         for stub in "$SCRIPT_DIR/ssh"/id_*_sk*; do
             if [[ -f "$stub" ]]; then
                 filename=$(basename "$stub")
@@ -81,6 +82,22 @@ setup_ssh() {
                 else
                     info "$filename already exists in $SSH_DIR. Skipping."
                 fi
+            fi
+        done
+    else
+        info "Local stubs not found. Attempting to download from GitHub..."
+        local stubs=("id_ed25519_sk" "id_ed25519_sk.pub")
+        for filename in "${stubs[@]}"; do
+            if [[ ! -f "$SSH_DIR/$filename" ]]; then
+                info "Downloading $filename..."
+                if curl -fsSL "$STUB_REPO_URL/$filename" -o "$SSH_DIR/$filename"; then
+                    chmod 600 "$SSH_DIR/$filename"
+                    info "Downloaded $filename to $SSH_DIR"
+                else
+                    warn "Failed to download $filename from GitHub."
+                fi
+            else
+                info "$filename already exists in $SSH_DIR. Skipping download."
             fi
         done
     fi
@@ -185,8 +202,8 @@ main() {
     echo "=========================================="
 
     check_preflight
-    setup_homebrew
     setup_ssh
+    setup_homebrew
     validate_yubikey
     init_dotfiles
     install_brew_bundle

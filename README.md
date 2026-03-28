@@ -26,7 +26,7 @@ This repository provides a single bootstrap script to prepare a fresh macOS mach
     - `chezmoi`: Dotfiles manager.
 4.  **SSH Setup**:
     - Ensures `~/.ssh` exists with correct permissions (`700`).
-    - Installs bundled SSH key stubs (`id_ed25519_sk`) if they are missing from `~/.ssh`.
+    - Installs bundled SSH key stubs (`id_ed25519_sk`) if they are missing from `~/.ssh`. These can be copied from a local clone or downloaded directly from GitHub if the script is run via `curl`.
     - Validates that SSH key files are present.
     - Adds a managed SSH configuration entry for GitHub if not already present, preserving your existing `~/.ssh/config`.
 5.  **YubiKey Validation**: Confirms a YubiKey is detected and that OpenSSH supports security keys (`sk` keys).
