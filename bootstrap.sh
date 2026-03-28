@@ -126,10 +126,18 @@ Host github.com
     AddKeysToAgent yes
     UseKeychain yes
     IdentityFile ~/.ssh/id_ed25519_sk_private_a
+    IdentitiesOnly yes
 EOF
         chmod 600 "$SSH_DIR/config"
     else
         info "GitHub entry already exists in SSH config. Preserving."
+    fi
+
+    # Add github.com to known_hosts to avoid prompt
+    if ! ssh-keygen -F github.com >/dev/null 2>&1; then
+        info "Adding github.com to ~/.ssh/known_hosts..."
+        ssh-keyscan -H github.com >> "$SSH_DIR/known_hosts" 2>/dev/null
+        chmod 600 "$SSH_DIR/known_hosts"
     fi
 }
 
@@ -157,7 +165,25 @@ validate_yubikey() {
     success "YubiKey/FIDO readiness verified."
 }
 
-# --- 5. chezmoi Initialization ---
+# --- 5. SSH Connectivity Test ---
+test_ssh_connection() {
+    info "Testing SSH connectivity to GitHub..."
+    local ssh_path
+    ssh_path=$(brew --prefix openssh)/bin/ssh
+
+    # Try to connect to GitHub. Exit code 1 is expected for successful auth but no shell.
+    # We use the specific identity file to be sure.
+    if ! "$ssh_path" -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 | grep -q "Hi simonmittag!"; then
+        warn "SSH connectivity test to GitHub failed or returned unexpected output."
+        info "You might need to touch your YubiKey now for the test connection..."
+        if ! "$ssh_path" -T -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 | grep -q "Hi simonmittag!"; then
+            error "Could not verify GitHub SSH access. Please ensure your YubiKey is registered with GitHub and the stub is correct."
+        fi
+    fi
+    success "GitHub SSH connectivity verified."
+}
+
+# --- 6. chezmoi Initialization ---
 init_dotfiles() {
     info "Initializing dotfiles with chezmoi from $DOTFILES_REPO..."
 
@@ -168,13 +194,14 @@ init_dotfiles() {
         ssh_path=$(brew --prefix openssh)/bin/ssh
         
         info "Applying dotfiles... You might be prompted to touch your YubiKey."
-        GIT_SSH_COMMAND="$ssh_path" chezmoi init --apply "$DOTFILES_REPO"
+        # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$DOTFILES_REPO"
     else
         error "chezmoi is not available even after attempted installation."
     fi
 }
 
-# --- 6. Homebrew Bundle ---
+# --- 7. Homebrew Bundle ---
 install_brew_bundle() {
     info "Looking for Brewfile to install additional packages..."
     
@@ -205,6 +232,7 @@ main() {
     setup_ssh
     setup_homebrew
     validate_yubikey
+    test_ssh_connection
     init_dotfiles
     install_brew_bundle
 
