@@ -5,7 +5,7 @@ This repository provides a single bootstrap script to prepare a fresh macOS mach
 ## Up and Running
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/simonmittag/dotfiles-init/main/bootstrap.sh)"
+/bin/bash -c "$(curl -fsSL https://bit.ly/4dgccZQ)"
 ```
 
 ## Prerequisites
