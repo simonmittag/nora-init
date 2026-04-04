@@ -249,7 +249,7 @@ test_ssh_connection() {
 
     # Try to connect to GitHub. Exit code 1 is expected for successful auth but no shell.
     # We use || true or an if check to ensure the script doesn't exit under set -e
-    info "🔐 You might need to touch your YubiKey now..."
+    warn "🔐 You might need to touch your YubiKey now..."
     local ssh_output
     ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 || true)
 
@@ -272,7 +272,7 @@ init_sabsh() {
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
         
-        info "Applying sabsh... You might be prompted to touch your YubiKey."
+        warn "Applying sabsh... You might be prompted to touch your YubiKey."
         # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
         GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$SABSH_REPO"
     else
