@@ -98,7 +98,8 @@ ask_to_continue() {
             if [[ -z "$key" ]]; then
                 # Default to 'n' if input is empty
                 local final_val="${input:-n}"
-                echo "" # Move to next line
+                # Delete the prompt line
+                paint_prompt "" false
                 if [[ "$final_val" =~ ^[Yy]$ ]]; then
                     return 0
                 else
@@ -113,14 +114,9 @@ ask_to_continue() {
             # "accept" usually means proceed.
             
             if [[ "$key" =~ ^[YyNn]$ ]]; then
-                echo -n "$key"
                 input="$key"
-                # The task says "if it's n or y accept". Let's wait for Enter or accept immediately?
-                # Usually chezmoi waits for Enter or accepts on first key for single-char prompts.
-                # "else keep the prompt" suggests we ignore other keys.
-                
-                # Let's auto-accept on y/n to match "accept" phrasing.
-                echo ""
+                # Delete the prompt line
+                paint_prompt "" false
                 if [[ "$key" =~ ^[Yy]$ ]]; then
                     return 0
                 else
