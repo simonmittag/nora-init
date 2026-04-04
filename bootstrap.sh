@@ -105,7 +105,7 @@ setup_ssh() {
     # Verify existing key material
     # We look for common FIDO/Security Key patterns
     local key_found=false
-    for key in "$SSH_DIR"/id_*_sk "$SSH_DIR"/id_ed25519 "$SSH_DIR"/id_rsa; do
+    for key in "$SSH_DIR"/id_*_sk* "$SSH_DIR"/id_ed25519 "$SSH_DIR"/id_rsa; do
         if [[ -f "$key" ]]; then
             info "Found SSH key: $key"
             chmod 600 "$key"
