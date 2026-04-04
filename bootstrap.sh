@@ -43,34 +43,29 @@ ask_to_continue() {
         return 0
     fi
 
-    echo -ne "\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? "
-    local prompt_hint="> n/y default: n"
+    warn "This will overwrite your bash configuration. Do you want to continue?"
+    local prompt_hint="\033[0;32m>\033[0m \033[90mn/y default: n\033[0m"
     local input=""
     local show_hint=true
-    # Print the initial hint (no newline, but we must avoid \033[1G for first call)
-    echo -ne "\033[90m$prompt_hint\033[0m"
+    # Print the initial hint and move cursor back 14 chars to focus the 'n'
+    echo -ne "$prompt_hint\033[14D"
 
     while true; do
-        # Read a single character, -s for silent (don't echo), -n 1 for one char
-        # Use a timeout of 0.1 to avoid blocking forever and allow for state checks if needed, 
-        # but standard read is fine here.
         if read -rsn 1 key; then
-            # If any key is pressed, we clear the hint if it was showing
             if [ "$show_hint" = true ]; then
                 # Move back to cover the hint and clear it
-                echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? > "
+                echo -ne "\r\033[K\033[0;32m>\033[0m "
                 show_hint=false
             fi
 
-            # Handle backspace (ASCII 127 or 8)
             if [[ $key == $'\x7f' || $key == $'\b' ]]; then
                 if [[ -n "$input" ]]; then
                     input="${input%?}"
-                    echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? > $input"
+                    echo -ne "\r\033[K\033[0;32m>\033[0m $input"
                 fi
-                # If input becomes empty, restore the hint
+                # If input becomes empty, restore the hint and focus 'n'
                 if [[ -z "$input" ]]; then
-                    echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? \033[90m$prompt_hint\033[0m"
+                    echo -ne "\r\033[K$prompt_hint\033[14D"
                     show_hint=true
                 fi
                 continue
