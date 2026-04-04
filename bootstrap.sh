@@ -44,7 +44,7 @@ ask_to_continue() {
     fi
 
     warn "This will overwrite your bash configuration. Do you want to continue?"
-    local prompt_hint="\033[0;32m>\033[0m \033[90mn/y default: n\033[0m"
+    local prompt_hint="\033[1;32m>\033[0m \033[90mn/y default: n\033[0m"
     local input=""
     local show_hint=true
     # Print the initial hint and move cursor back 14 chars to focus the 'n'
@@ -69,7 +69,7 @@ ask_to_continue() {
             if [[ $key == $'\x7f' || $key == $'\b' ]]; then
                 if [[ -n "$input" ]]; then
                     input="${input%?}"
-                    echo -ne "\r\033[K\033[0;32m>\033[0m $input"
+                    echo -ne "\r\033[K\033[1;32m>\033[0m $input"
                 fi
                 # If input becomes empty, restore the hint and focus 'n'
                 if [[ -z "$input" ]]; then
@@ -83,7 +83,7 @@ ask_to_continue() {
             if [[ "$key" =~ ^[YyNn]$ ]]; then
                 if [ "$show_hint" = true ]; then
                     # Clear the hint and start input
-                    echo -ne "\r\033[K\033[0;32m>\033[0m "
+                    echo -ne "\r\033[K\033[1;32m>\033[0m "
                     show_hint=false
                 fi
                 input="$key"
