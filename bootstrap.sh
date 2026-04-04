@@ -60,7 +60,7 @@ ask_to_continue() {
                 if [[ "$final_val" =~ ^[Yy]$ ]]; then
                     return 0
                 else
-                    info "Setup aborted by user."
+                    error "Setup aborted by user."
                     exit 0
                 fi
             fi
@@ -271,7 +271,7 @@ init_sabsh() {
         # Ensure we use the Homebrew SSH for the git clone within chezmoi
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
-        
+
         warn "Applying sabsh... You might be prompted to touch your YubiKey."
         # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
         GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$SABSH_REPO"
