@@ -65,7 +65,6 @@ ask_to_continue() {
     local show_hint=true
 
     # Print the initial hint
-    echo "" # Move to a new line for the interactive prompt
     paint_prompt "$prompt_hint" true
 
     while true; do
