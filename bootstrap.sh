@@ -72,9 +72,12 @@ setup_ssh() {
     # Install bundled SSH key stubs
     if [[ -d "$SCRIPT_DIR/ssh" ]]; then
         info "Installing bundled SSH key stubs from local repository..."
-        for stub in "$SCRIPT_DIR/ssh"/id_*_sk*; do
+        for stub in "$SCRIPT_DIR/ssh"/id_*; do
             if [[ -f "$stub" ]]; then
                 filename=$(basename "$stub")
+                # Only process security key stubs (private or public)
+                [[ "$filename" != *_sk* ]] && continue
+
                 if [[ ! -f "$SSH_DIR/$filename" ]]; then
                     cp "$stub" "$SSH_DIR/$filename"
                     chmod 600 "$SSH_DIR/$filename"
@@ -105,8 +108,15 @@ setup_ssh() {
     # Verify existing key material
     # We look for common FIDO/Security Key patterns
     local key_found=false
-    for key in "$SSH_DIR"/id_*_sk* "$SSH_DIR"/id_ed25519 "$SSH_DIR"/id_rsa; do
-        if [[ -f "$key" ]]; then
+    # Use a broad glob and filter in-script for better reliability across different shells/environments
+    for key in "$SSH_DIR"/id_*; do
+        # Skip if not a regular file or if it's a public key
+        [[ ! -f "$key" ]] && continue
+        [[ "$key" == *.pub ]] && continue
+
+        filename=$(basename "$key")
+        # Match security keys (typically contain _sk) or standard identity files
+        if [[ "$filename" == *_sk* ]] || [[ "$filename" == "id_ed25519" ]] || [[ "$filename" == "id_rsa" ]]; then
             info "Found SSH key: $key"
             chmod 600 "$key"
             key_found=true
