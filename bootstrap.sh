@@ -19,21 +19,6 @@ warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
 error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; exit 1; }
 success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
 
-# --- Terminal Painting Helper ---
-# \033[90m: Grey color
-# \033[K: Clear from cursor to end of line
-# \033[1G: Move cursor to column 1
-# \033[0m: Reset color
-paint_prompt() {
-    local text="$1"
-    local is_grey="${2:-false}"
-    if [ "$is_grey" = true ]; then
-        echo -ne "\033[1G\033[K\033[90m$text\033[0m"
-    else
-        echo -ne "\033[1G\033[K$text"
-    fi
-}
-
 # --- 1. Preflight Checks ---
 check_preflight() {
     info "Running preflight checks..."
@@ -58,14 +43,12 @@ ask_to_continue() {
         return 0
     fi
 
-    warn "This will overwrite your bash configuration. Do you want to continue?"
-    
+    echo -ne "\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? "
     local prompt_hint="> n/y default: n"
     local input=""
     local show_hint=true
-
-    # Print the initial hint
-    paint_prompt "$prompt_hint" true
+    # Print the initial hint (no newline, but we must avoid \033[1G for first call)
+    echo -ne "\033[90m$prompt_hint\033[0m"
 
     while true; do
         # Read a single character, -s for silent (don't echo), -n 1 for one char
@@ -74,7 +57,8 @@ ask_to_continue() {
         if read -rsn 1 key; then
             # If any key is pressed, we clear the hint if it was showing
             if [ "$show_hint" = true ]; then
-                paint_prompt "> " false
+                # Move back to cover the hint and clear it
+                echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? > "
                 show_hint=false
             fi
 
@@ -82,13 +66,11 @@ ask_to_continue() {
             if [[ $key == $'\x7f' || $key == $'\b' ]]; then
                 if [[ -n "$input" ]]; then
                     input="${input%?}"
-                    # Update display: move back, clear to end, print new input
-                    paint_prompt "> $input" false
+                    echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? > $input"
                 fi
-                
                 # If input becomes empty, restore the hint
                 if [[ -z "$input" ]]; then
-                    paint_prompt "$prompt_hint" true
+                    echo -ne "\r\033[K\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? \033[90m$prompt_hint\033[0m"
                     show_hint=true
                 fi
                 continue
@@ -96,10 +78,9 @@ ask_to_continue() {
 
             # Handle Enter (key is empty string with read -n 1)
             if [[ -z "$key" ]]; then
-                # Default to 'n' if input is empty
                 local final_val="${input:-n}"
-                # Delete the prompt line
-                paint_prompt "" false
+                # Delete the prompt line completely
+                echo -ne "\r\033[K"
                 if [[ "$final_val" =~ ^[Yy]$ ]]; then
                     return 0
                 else
@@ -108,15 +89,9 @@ ask_to_continue() {
                 fi
             fi
 
-            # Accumulate input (only allow one character for this simple prompt?)
-            # The task says "if it's n or y accept, else keep the prompt".
-            # This implies we can accept it immediately or wait for Enter.
-            # "accept" usually means proceed.
-            
             if [[ "$key" =~ ^[YyNn]$ ]]; then
                 input="$key"
-                # Delete the prompt line
-                paint_prompt "" false
+                echo -ne "\r\033[K"
                 if [[ "$key" =~ ^[Yy]$ ]]; then
                     return 0
                 else
