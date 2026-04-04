@@ -8,8 +8,10 @@ set -euo pipefail
 SABSH_REPO="git@github.com:simonmittag/sabsh.git"
 STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/sabsh-init/main/ssh"
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
-SSH_DIR="$HOME/.ssh"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ensure HOME is set (Bash -u safety)
+export HOME="${HOME:-$(eval echo ~$(whoami))}"
+SSH_DIR="${HOME}/.ssh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # --- UI Helpers ---
 info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
@@ -33,7 +35,24 @@ check_preflight() {
     success "Preflight checks passed."
 }
 
-# --- 2. Homebrew Setup ---
+# --- 2. User Confirmation ---
+ask_to_continue() {
+    # Skip prompt if not running in a terminal (e.g., CI or piped)
+    if [[ ! -t 0 ]]; then
+        info "Non-interactive environment detected. Proceeding automatically..."
+        return 0
+    fi
+
+    echo ""
+    read -p "Do you want to continue with the sabsh setup? (y/N) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        info "Setup aborted by user."
+        exit 0
+    fi
+}
+
+# --- 3. Homebrew Setup ---
 setup_homebrew() {
     if ! command -v brew >/dev/null 2>&1; then
         info "Homebrew not found. Installing..."
@@ -252,6 +271,7 @@ main() {
     echo "=========================================="
 
     check_preflight
+    ask_to_continue
     setup_ssh
     setup_homebrew
     validate_yubikey
