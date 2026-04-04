@@ -61,7 +61,7 @@ ask_to_continue() {
                     return 0
                 else
                     error "Setup aborted by user."
-                    exit 0
+                    exit 1
                 fi
             fi
 
@@ -91,8 +91,8 @@ ask_to_continue() {
                 if [[ "$key" =~ ^[Yy]$ ]]; then
                     return 0
                 else
-                    info "Setup aborted by user."
-                    exit 0
+                    error "Setup aborted by user."
+                    exit 1
                 fi
             fi
             # Ignore other keys (keep the prompt and hint)
