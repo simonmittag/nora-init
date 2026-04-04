@@ -52,25 +52,6 @@ ask_to_continue() {
 
     while true; do
         if read -rsn 1 key; then
-            if [ "$show_hint" = true ]; then
-                # Move back to cover the hint and clear it
-                echo -ne "\r\033[K\033[0;32m>\033[0m "
-                show_hint=false
-            fi
-
-            if [[ $key == $'\x7f' || $key == $'\b' ]]; then
-                if [[ -n "$input" ]]; then
-                    input="${input%?}"
-                    echo -ne "\r\033[K\033[0;32m>\033[0m $input"
-                fi
-                # If input becomes empty, restore the hint and focus 'n'
-                if [[ -z "$input" ]]; then
-                    echo -ne "\r\033[K$prompt_hint\033[14D"
-                    show_hint=true
-                fi
-                continue
-            fi
-
             # Handle Enter (key is empty string with read -n 1)
             if [[ -z "$key" ]]; then
                 local final_val="${input:-n}"
@@ -84,7 +65,27 @@ ask_to_continue() {
                 fi
             fi
 
+            # Handle Backspace
+            if [[ $key == $'\x7f' || $key == $'\b' ]]; then
+                if [[ -n "$input" ]]; then
+                    input="${input%?}"
+                    echo -ne "\r\033[K\033[0;32m>\033[0m $input"
+                fi
+                # If input becomes empty, restore the hint and focus 'n'
+                if [[ -z "$input" ]]; then
+                    echo -ne "\r\033[K$prompt_hint\033[14D"
+                    show_hint=true
+                fi
+                continue
+            fi
+
+            # Handle Valid Selection
             if [[ "$key" =~ ^[YyNn]$ ]]; then
+                if [ "$show_hint" = true ]; then
+                    # Clear the hint and start input
+                    echo -ne "\r\033[K\033[0;32m>\033[0m "
+                    show_hint=false
+                fi
                 input="$key"
                 echo -ne "\r\033[K"
                 if [[ "$key" =~ ^[Yy]$ ]]; then
@@ -94,7 +95,7 @@ ask_to_continue() {
                     exit 0
                 fi
             fi
-            # Ignore other keys (keep the prompt)
+            # Ignore other keys (keep the prompt and hint)
         fi
     done
 }
