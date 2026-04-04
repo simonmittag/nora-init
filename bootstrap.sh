@@ -19,6 +19,21 @@ warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
 error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; exit 1; }
 success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
 
+# --- Terminal Painting Helper ---
+# \033[90m: Grey color
+# \033[K: Clear from cursor to end of line
+# \033[1G: Move cursor to column 1
+# \033[0m: Reset color
+paint_prompt() {
+    local text="$1"
+    local is_grey="${2:-false}"
+    if [ "$is_grey" = true ]; then
+        echo -ne "\033[1G\033[K\033[90m$text\033[0m"
+    else
+        echo -ne "\033[1G\033[K$text"
+    fi
+}
+
 # --- 1. Preflight Checks ---
 check_preflight() {
     info "Running preflight checks..."
@@ -43,13 +58,80 @@ ask_to_continue() {
         return 0
     fi
 
-    echo -ne "\033[0;33m[WARN]\033[0m This will overwrite your bash configuration. Do you want to continue? (y/N) "
-    read -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        info "Setup aborted by user."
-        exit 0
-    fi
+    warn "This will overwrite your bash configuration. Do you want to continue?"
+    
+    local prompt_hint="> n/y default: n"
+    local input=""
+    local show_hint=true
+
+    # Print the initial hint
+    echo "" # Move to a new line for the interactive prompt
+    paint_prompt "$prompt_hint" true
+
+    while true; do
+        # Read a single character, -s for silent (don't echo), -n 1 for one char
+        # Use a timeout of 0.1 to avoid blocking forever and allow for state checks if needed, 
+        # but standard read is fine here.
+        if read -rsn 1 key; then
+            # If any key is pressed, we clear the hint if it was showing
+            if [ "$show_hint" = true ]; then
+                paint_prompt "> " false
+                show_hint=false
+            fi
+
+            # Handle backspace (ASCII 127 or 8)
+            if [[ $key == $'\x7f' || $key == $'\b' ]]; then
+                if [[ -n "$input" ]]; then
+                    input="${input%?}"
+                    # Update display: move back, clear to end, print new input
+                    paint_prompt "> $input" false
+                fi
+                
+                # If input becomes empty, restore the hint
+                if [[ -z "$input" ]]; then
+                    paint_prompt "$prompt_hint" true
+                    show_hint=true
+                fi
+                continue
+            fi
+
+            # Handle Enter (key is empty string with read -n 1)
+            if [[ -z "$key" ]]; then
+                # Default to 'n' if input is empty
+                local final_val="${input:-n}"
+                echo "" # Move to next line
+                if [[ "$final_val" =~ ^[Yy]$ ]]; then
+                    return 0
+                else
+                    info "Setup aborted by user."
+                    exit 0
+                fi
+            fi
+
+            # Accumulate input (only allow one character for this simple prompt?)
+            # The task says "if it's n or y accept, else keep the prompt".
+            # This implies we can accept it immediately or wait for Enter.
+            # "accept" usually means proceed.
+            
+            if [[ "$key" =~ ^[YyNn]$ ]]; then
+                echo -n "$key"
+                input="$key"
+                # The task says "if it's n or y accept". Let's wait for Enter or accept immediately?
+                # Usually chezmoi waits for Enter or accepts on first key for single-char prompts.
+                # "else keep the prompt" suggests we ignore other keys.
+                
+                # Let's auto-accept on y/n to match "accept" phrasing.
+                echo ""
+                if [[ "$key" =~ ^[Yy]$ ]]; then
+                    return 0
+                else
+                    info "Setup aborted by user."
+                    exit 0
+                fi
+            fi
+            # Ignore other keys (keep the prompt)
+        fi
+    done
 }
 
 # --- 3. Homebrew Setup ---
