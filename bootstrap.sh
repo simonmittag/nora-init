@@ -44,7 +44,7 @@ ask_to_continue() {
     fi
 
     echo ""
-    read -p "Do you want to continue with the sabsh setup? (y/N) " -n 1 -r
+    read -p "⚠️ This will overwrite your bash configuration Do you want to continue? (y/N) " -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         info "Setup aborted by user."
