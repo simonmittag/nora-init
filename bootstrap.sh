@@ -44,7 +44,7 @@ ask_to_continue() {
     fi
 
     echo ""
-    read -p "⚠️ This will overwrite your bash configuration Do you want to continue? (y/N) " -n 1 -r
+    read -p "\033[0;33m[WARN]\033[0m This will overwrite your bash configuration Do you want to continue? (y/N) " -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         info "Setup aborted by user."
