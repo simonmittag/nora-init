@@ -1,13 +1,13 @@
 # Sabsh Init
 
 This script prepares a fresh macOS environment for [sabsh](https://github.com/simonmittag/sabsh). 
-It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes dotfiles via `chezmoi`.
+It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes sabsh via `chezmoi`.
 
 ### Prerequisites
 
 - **macOS**: Target system must be running macOS.
 - **YubiKey**: A YubiKey configured for FIDO/SSH.
-- **Internet**: Required for package downloads and dotfiles initialization.
+- **Internet**: Required for package downloads and sabsh initialization.
 
 ### Quick Start
 

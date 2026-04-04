@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-# macOS Bootstrap Script
-# Prepares a machine for chezmoi dotfiles management with SSH/YubiKey.
+# prepare machine for sabsh installation
 
 set -euo pipefail
 
 # --- Configuration ---
-DOTFILES_REPO="git@github.com:simonmittag/dotfiles.git"
-STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/dotfiles-init/main/ssh"
+SABSH_REPO="git@github.com:simonmittag/sabsh.git"
+STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/sabsh-init/main/ssh"
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
 SSH_DIR="$HOME/.ssh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -196,9 +195,9 @@ test_ssh_connection() {
     fi
 }
 
-# --- 6. chezmoi Initialization ---
-init_dotfiles() {
-    info "Initializing dotfiles with chezmoi from $DOTFILES_REPO..."
+# --- 6. sabsh Initialization ---
+init_sabsh() {
+    info "Initializing sabsh with chezmoi from $SABSH_REPO..."
 
     if command -v chezmoi >/dev/null 2>&1; then
         # Use the brew-installed chezmoi
@@ -206,9 +205,9 @@ init_dotfiles() {
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
         
-        info "Applying dotfiles... You might be prompted to touch your YubiKey."
+        info "Applying sabsh... You might be prompted to touch your YubiKey."
         # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$DOTFILES_REPO"
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$SABSH_REPO"
     else
         error "chezmoi is not available even after attempted installation."
     fi
@@ -235,10 +234,21 @@ install_brew_bundle() {
     fi
 }
 
+# --- 8. Final Environment Setup ---
+source_bash_environment() {
+    if [[ -f "$HOME/.bash_profile" ]]; then
+        info "Sourcing ~/.bash_profile..."
+        # Note: sourcing it within the script's subshell only affects the script,
+        # but the user's manual step should still be encouraged.
+        # However, the task specifically asked for sourcing.
+        source "$HOME/.bash_profile" || warn "Failed to source ~/.bash_profile"
+    fi
+}
+
 # --- Main Flow ---
 main() {
     echo "=========================================="
-    echo "   macOS Dotfiles Bootstrap Script        "
+    echo "  📋 sabsh bootstrap script               "
     echo "=========================================="
 
     check_preflight
@@ -246,11 +256,11 @@ main() {
     setup_homebrew
     validate_yubikey
     test_ssh_connection
-    init_dotfiles
+    init_sabsh
     install_brew_bundle
+    source_bash_environment
 
-    success "Bootstrap complete! Welcome to your new environment."
-    info "Manual step: You may need to restart your shell or run 'source ~/.zshrc' (or equivalent) to see all changes."
+    success "setup complete - check your new prompt below!"
 }
 
 main "$@"
