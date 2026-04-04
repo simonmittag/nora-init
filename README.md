@@ -1,4 +1,4 @@
-# Secure Air-gapped Backup Shell (SABSH) Bootloader
+# Sabsh Init
 
 This script prepares a fresh macOS environment for [sabsh](https://github.com/simonmittag/sabsh). 
 It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes dotfiles via `chezmoi`.
