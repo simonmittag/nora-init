@@ -175,10 +175,10 @@ validate_yubikey() {
 
     # Check if ykman can see a device
     if ! ykman list >/dev/null 2>&1; then
-        warn "No YubiKey detected by ykman. Please plug in your YubiKey."
+        warn "🔐 No YubiKey detected by ykman. Please plug in your YubiKey."
         # Give one more chance or check via system_profiler
         if ! system_profiler SPUSBDataType | grep -iq "Yubico"; then
-            error "No YubiKey detected via USB. Actionable fix: Insert your YubiKey and try again."
+            error "🔐 No YubiKey detected via USB. Actionable fix: Insert your YubiKey and try again."
         fi
     fi
 
@@ -187,7 +187,7 @@ validate_yubikey() {
     local ssh_bin
     ssh_bin=$(brew --prefix openssh)/bin/ssh
     if ! "$ssh_bin" -Q key | grep -q "sk"; then
-        error "OpenSSH ($ssh_bin) does not seem to support security keys (FIDO). Ensure you are using the Homebrew version of OpenSSH."
+        error "🔐 OpenSSH ($ssh_bin) does not seem to support security keys (FIDO). Ensure you are using the Homebrew version of OpenSSH."
     fi
 
     success "YubiKey/FIDO readiness verified."
@@ -201,7 +201,7 @@ test_ssh_connection() {
 
     # Try to connect to GitHub. Exit code 1 is expected for successful auth but no shell.
     # We use || true or an if check to ensure the script doesn't exit under set -e
-    info "You might need to touch your YubiKey now..."
+    info "🔐 You might need to touch your YubiKey now..."
     local ssh_output
     ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 || true)
 
