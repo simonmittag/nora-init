@@ -1,13 +1,13 @@
-# Sabsh Init
+# Nora Init
 
-This script prepares a fresh macOS environment for [sabsh](https://github.com/simonmittag/sabsh). 
-It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes sabsh via `chezmoi`.
+This script prepares a fresh macOS environment for [nora](https://github.com/simonmittag/nora). 
+It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes nora via `chezmoi`.
 
 ### Prerequisites
 
 - **macOS**: Target system must be running macOS.
 - **YubiKey**: A YubiKey configured for FIDO/SSH.
-- **Internet**: Required for package downloads and sabsh initialization.
+- **Internet**: Required for package downloads and nora initialization.
 
 ### Quick Start
 

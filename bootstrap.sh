@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# prepare machine for sabsh installation
+# prepare machine for nora installation
 
 set -euo pipefail
 
 # --- Configuration ---
-SABSH_REPO="git@github.com:simonmittag/sabsh.git"
-STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/sabsh-init/main/ssh"
+NORA_REPO="git@github.com:simonmittag/nora.git"
+STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main/ssh"
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
@@ -262,9 +262,9 @@ test_ssh_connection() {
     fi
 }
 
-# --- 6. sabsh Initialization ---
-init_sabsh() {
-    info "Initializing sabsh with chezmoi from $SABSH_REPO..."
+# --- 6. nora Initialization ---
+init_nora() {
+    info "Initializing nora with chezmoi from $NORA_REPO..."
 
     if command -v chezmoi >/dev/null 2>&1; then
         # Use the brew-installed chezmoi
@@ -272,9 +272,9 @@ init_sabsh() {
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
 
-        warn "Applying sabsh... You might be prompted to touch your YubiKey."
+        warn "Applying nora... You might be prompted to touch your YubiKey."
         # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$SABSH_REPO"
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$NORA_REPO"
     else
         error "chezmoi is not available even after attempted installation."
     fi
@@ -314,9 +314,8 @@ source_bash_environment() {
 
 # --- Main Flow ---
 main() {
-    echo "=========================================="
-    echo "  📋 sabsh bootstrap script               "
-    echo "=========================================="
+    echo "◉ nora bootstrap script."
+    echo ""
 
     check_preflight
     ask_to_continue
@@ -324,7 +323,7 @@ main() {
     setup_homebrew
     validate_yubikey
     test_ssh_connection
-    init_sabsh
+    init_nora
     install_brew_bundle
     source_bash_environment
 
