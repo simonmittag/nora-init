@@ -11,6 +11,8 @@ BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
 SSH_DIR="${HOME}/.ssh"
+NORA_DIR="${HOME}/.local/share/nora"
+CHEZMOI_DEFAULT_DIR_INVALID="${HOME}/.local/share/chezmoi"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # --- UI Helpers ---
@@ -272,9 +274,16 @@ init_nora() {
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
 
+        # Remove default chezmoi directory if it exists
+        if [[ -d "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
+            info "Removing existing chezmoi directory $CHEZMOI_DEFAULT_DIR_INVALID..."
+            rm -rf "$CHEZMOI_DEFAULT_DIR_INVALID"
+        fi
+
         warn "Applying nora... You might be prompted to touch your YubiKey."
         # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply "$NORA_REPO"
+        # Use --source to set the source directory to ~/.local/share/nora
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply --source "$NORA_DIR" "$NORA_REPO"
     else
         error "chezmoi is not available even after attempted installation."
     fi
@@ -309,6 +318,13 @@ source_bash_environment() {
         # but the user's manual step should still be encouraged.
         # However, the task specifically asked for sourcing.
         source "$HOME/.bash_profile" || warn "Failed to source ~/.bash_profile"
+    fi
+
+    # Verify chezmoi directory is definitely not there
+    if [[ -d "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
+        error "$CHEZMOI_DEFAULT_DIR_INVALID still exists. This should not happen."
+    else
+        success "Verified $CHEZMOI_DEFAULT_DIR_INVALID does not exist."
     fi
 }
 
