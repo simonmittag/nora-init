@@ -38,32 +38,34 @@ check_preflight() {
 }
 
 # --- 2. User Confirmation ---
-ask_to_continue() {
-    # Skip prompt if not running in a terminal (e.g., CI or piped)
-    if [[ ! -t 0 ]]; then
-        info "Non-interactive environment detected. Proceeding automatically..."
-        return 0
+ask_user() {
+    local message="$1"
+    local default="${2:-n}" # default to 'n'
+    local prompt_hint
+
+    if [[ "$default" == "y" ]]; then
+        prompt_hint="\033[1;32m>\033[0m \033[90my/n default: y\033[0m"
+    else
+        prompt_hint="\033[1;32m>\033[0m \033[90mn/y default: n\033[0m"
     fi
 
-    warn "This will overwrite your bash configuration. Do you want to continue?"
-    local prompt_hint="\033[1;32m>\033[0m \033[90mn/y default: n\033[0m"
+    warn "$message"
     local input=""
     local show_hint=true
-    # Print the initial hint and move cursor back 14 chars to focus the 'n'
+    # Print the initial hint and move cursor back 14 chars to focus the default
     echo -ne "$prompt_hint\033[14D"
 
     while true; do
         if read -rsn 1 key; then
             # Handle Enter (key is empty string with read -n 1)
             if [[ -z "$key" ]]; then
-                local final_val="${input:-n}"
+                local final_val="${input:-$default}"
                 # Delete the prompt line completely
                 echo -ne "\r\033[K"
                 if [[ "$final_val" =~ ^[Yy]$ ]]; then
                     return 0
                 else
-                    error "Setup aborted by user."
-                    exit 1
+                    return 1
                 fi
             fi
 
@@ -73,7 +75,7 @@ ask_to_continue() {
                     input="${input%?}"
                     echo -ne "\r\033[K\033[1;32m>\033[0m $input"
                 fi
-                # If input becomes empty, restore the hint and focus 'n'
+                # If input becomes empty, restore the hint
                 if [[ -z "$input" ]]; then
                     echo -ne "\r\033[K$prompt_hint\033[14D"
                     show_hint=true
@@ -93,13 +95,25 @@ ask_to_continue() {
                 if [[ "$key" =~ ^[Yy]$ ]]; then
                     return 0
                 else
-                    error "Setup aborted by user."
-                    exit 1
+                    return 1
                 fi
             fi
             # Ignore other keys (keep the prompt and hint)
         fi
     done
+}
+
+ask_to_continue() {
+    # Skip prompt if not running in a terminal (e.g., CI or piped)
+    if [[ ! -t 0 ]]; then
+        info "Non-interactive environment detected. Proceeding automatically..."
+        return 0
+    fi
+
+    if ! ask_user "This will overwrite your bash configuration. Do you want to continue?" "n"; then
+        error "Setup aborted by user."
+        exit 1
+    fi
 }
 
 # --- 3. Homebrew Setup ---
@@ -328,6 +342,25 @@ source_bash_environment() {
     fi
 }
 
+# --- 9. Cleanup ---
+ask_to_wipe_installation_files() {
+    # Skip prompt if not running in a terminal
+    if [[ ! -t 0 ]]; then
+        return 1
+    fi
+
+    ask_user "wipe the installation files?" "y"
+}
+
+cleanup_installation() {
+    info "Wiping installation files in $SCRIPT_DIR..."
+    if [[ "$SCRIPT_DIR" != "$HOME" && "$SCRIPT_DIR" != "/" ]]; then
+        rm -rf "$SCRIPT_DIR"
+    else
+        warn "Safe guard: SCRIPT_DIR is $SCRIPT_DIR, skipping wipe."
+    fi
+}
+
 # --- Main Flow ---
 main() {
     echo "◉ nora bootstrap script."
@@ -342,6 +375,10 @@ main() {
     init_nora
     install_brew_bundle
     source_bash_environment
+
+    if ask_to_wipe_installation_files; then
+        cleanup_installation
+    fi
 
     success "setup complete - check your new prompt below!"
 }
