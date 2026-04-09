@@ -6,7 +6,7 @@ set -euo pipefail
 
 # --- Configuration ---
 NORA_REPO="git@github.com:simonmittag/nora.git"
-STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main/ssh"
+NORA_INIT_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main"
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
@@ -175,7 +175,7 @@ setup_ssh() {
         for filename in "${stubs[@]}"; do
             if [[ ! -f "$SSH_DIR/$filename" ]]; then
                 info "Downloading $filename..."
-                if curl -fsSL "$STUB_REPO_URL/$filename" -o "$SSH_DIR/$filename"; then
+                if curl -fsSL "${NORA_INIT_URL}/ssh/$filename" -o "$SSH_DIR/$filename"; then
                     chmod 600 "$SSH_DIR/$filename"
                     info "Downloaded $filename to $SSH_DIR with safe permissions"
                 else
@@ -300,14 +300,29 @@ init_nora() {
             GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
         fi
 
-        # 2. Decrypt identities.json if present
-        if [[ -f "$SCRIPT_DIR/identities/identities.json.age" ]]; then
+        # 2. Decrypt identities.json
+        local age_file="$SCRIPT_DIR/identities/identities.json.age"
+        local delete_age_file=false
+
+        if [[ ! -f "$age_file" ]]; then
+            info "identities.json.age not found locally. Attempting to download..."
+            age_file=$(mktemp)
+            if curl -fsSL "${NORA_INIT_URL}/identities/identities.json.age" -o "$age_file"; then
+                delete_age_file=true
+            else
+                warn "Failed to download identities.json.age from GitHub."
+                rm -f "$age_file"
+                age_file=""
+            fi
+        fi
+
+        if [[ -n "$age_file" && -f "$age_file" ]]; then
             info "Decrypting identities.json using age and YubiKey..."
             local temp_id
             temp_id=$(mktemp)
             # Try to get identity. If no slot specified, plugin usually picks the first one or prompts.
             if age-plugin-yubikey --identity > "$temp_id" 2>/dev/null && grep -q "age1" "$temp_id"; then
-                age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$SCRIPT_DIR/identities/identities.json.age"
+                age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$age_file"
                 rm "$temp_id"
                 success "Decrypted identities.json to $NORA_DIR/identities.json"
             else
@@ -315,7 +330,7 @@ init_nora() {
                 local slot
                 slot=$(age-plugin-yubikey --list 2>/dev/null | grep -i "Slot" | grep -oE '[0-9]+' | head -n 1 || true)
                 if [[ -n "$slot" ]] && age-plugin-yubikey --identity --slot "$slot" > "$temp_id" 2>/dev/null && grep -q "age1" "$temp_id"; then
-                    age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$SCRIPT_DIR/identities/identities.json.age"
+                    age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$age_file"
                     rm "$temp_id"
                     success "Decrypted identities.json to $NORA_DIR/identities.json"
                 else
@@ -323,6 +338,12 @@ init_nora() {
                     warn "No YubiKey found for decryption. Please ensure it is plugged in."
                 fi
             fi
+
+            if [[ "$delete_age_file" == true ]]; then
+                rm "$age_file"
+            fi
+        else
+            warn "No identities.json.age found or downloaded. Skipping decryption."
         fi
 
         warn "Applying nora... You might be prompted to touch your YubiKey."
