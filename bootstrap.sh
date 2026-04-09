@@ -404,11 +404,20 @@ ask_to_wipe_installation_files() {
 }
 
 cleanup_installation() {
-    info "Wiping installation files in $SCRIPT_DIR..."
-    if [[ "$SCRIPT_DIR" != "$HOME" && "$SCRIPT_DIR" != "/" ]]; then
-        rm -rf "$SCRIPT_DIR"
+    info "Wiping installation files..."
+    if [[ "$NORA_DIR" != "$HOME" && "$NORA_DIR" != "/" ]]; then
+        warn "Wiping $NORA_DIR"
+        rm -rf "$NORA_DIR"
+        # Additionally wipe the temporary subfolders in SCRIPT_DIR
+            for dir in "identities" "json" "ssh"; do
+                local target="$SCRIPT_DIR/$dir"
+                if [[ -d "$target" && "$target" != "$HOME" && "$target" != "/" ]]; then
+                    warn "Wiping $target..."
+                    rm -rf "$target"
+                fi
+            done
     else
-        warn "Safe guard: SCRIPT_DIR is $SCRIPT_DIR, skipping wipe."
+        warn "Safe guard: NORA_DIR is $NORA_DIR, skipping wipe."
     fi
 }
 
