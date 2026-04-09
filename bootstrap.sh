@@ -303,17 +303,25 @@ init_nora() {
         # 2. Decrypt identities.json if present
         if [[ -f "$SCRIPT_DIR/identities/identities.json.age" ]]; then
             info "Decrypting identities.json using age and YubiKey..."
-            local slot
-            slot=$(age-plugin-yubikey --list 2>/dev/null | grep -m 1 "Slot" | grep -oE '[0-9]+' | head -n 1 || true)
-            if [[ -n "$slot" ]]; then
-                local temp_id
-                temp_id=$(mktemp)
-                age-plugin-yubikey --identity --slot "$slot" > "$temp_id"
+            local temp_id
+            temp_id=$(mktemp)
+            # Try to get identity. If no slot specified, plugin usually picks the first one or prompts.
+            if age-plugin-yubikey --identity > "$temp_id" 2>/dev/null && grep -q "age1" "$temp_id"; then
                 age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$SCRIPT_DIR/identities/identities.json.age"
                 rm "$temp_id"
                 success "Decrypted identities.json to $NORA_DIR/identities.json"
             else
-                warn "No YubiKey found for decryption. Please ensure it is plugged in."
+                # Fallback to searching for a slot number if direct attempt failed
+                local slot
+                slot=$(age-plugin-yubikey --list 2>/dev/null | grep -i "Slot" | grep -oE '[0-9]+' | head -n 1 || true)
+                if [[ -n "$slot" ]] && age-plugin-yubikey --identity --slot "$slot" > "$temp_id" 2>/dev/null && grep -q "age1" "$temp_id"; then
+                    age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$SCRIPT_DIR/identities/identities.json.age"
+                    rm "$temp_id"
+                    success "Decrypted identities.json to $NORA_DIR/identities.json"
+                else
+                    rm -f "$temp_id"
+                    warn "No YubiKey found for decryption. Please ensure it is plugged in."
+                fi
             fi
         fi
 
