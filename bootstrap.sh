@@ -7,7 +7,7 @@ set -euo pipefail
 # --- Configuration ---
 NORA_REPO="git@github.com:simonmittag/nora.git"
 STUB_REPO_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main/ssh"
-BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi")
+BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
 SSH_DIR="${HOME}/.ssh"
@@ -284,7 +284,7 @@ init_nora() {
 
     if command -v chezmoi >/dev/null 2>&1; then
         # Use the brew-installed chezmoi
-        # Ensure we use the Homebrew SSH for the git clone within chezmoi
+        # Ensure we use the Homebrew SSH for the git clone
         local ssh_path
         ssh_path=$(brew --prefix openssh)/bin/ssh
 
@@ -294,10 +294,32 @@ init_nora() {
             rm -rf "$CHEZMOI_DEFAULT_DIR_INVALID"
         fi
 
+        # 1. Clone the repository manually so we can place identities.json before chezmoi init
+        if [[ ! -d "$NORA_DIR" ]]; then
+            info "Cloning $NORA_REPO to $NORA_DIR..."
+            GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
+        fi
+
+        # 2. Decrypt identities.json if present
+        if [[ -f "$SCRIPT_DIR/identities/identities.json.age" ]]; then
+            info "Decrypting identities.json using age and YubiKey..."
+            local slot
+            slot=$(age-plugin-yubikey --list 2>/dev/null | grep -m 1 "Slot" | grep -oE '[0-9]+' | head -n 1 || true)
+            if [[ -n "$slot" ]]; then
+                local temp_id
+                temp_id=$(mktemp)
+                age-plugin-yubikey --identity --slot "$slot" > "$temp_id"
+                age -d -i "$temp_id" -o "$NORA_DIR/identities.json" "$SCRIPT_DIR/identities/identities.json.age"
+                rm "$temp_id"
+                success "Decrypted identities.json to $NORA_DIR/identities.json"
+            else
+                warn "No YubiKey found for decryption. Please ensure it is plugged in."
+            fi
+        fi
+
         warn "Applying nora... You might be prompted to touch your YubiKey."
-        # Use explicit identity file in GIT_SSH_COMMAND to bypass any config issues
-        # Use --source to set the source directory to ~/.local/share/nora
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" chezmoi init --apply --source "$NORA_DIR" "$NORA_REPO"
+        # 3. Initialize and apply chezmoi using the prepared source directory
+        chezmoi init --apply --source "$NORA_DIR"
     else
         error "chezmoi is not available even after attempted installation."
     fi
