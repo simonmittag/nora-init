@@ -409,6 +409,7 @@ cleanup_bootstrap() {
     info "Wiping bootstrap files..."
     if [[ "$NORA_DIR" != "$HOME" && "$NORA_DIR" != "/" ]]; then
         warn "Wiping $NORA_DIR"
+        rm -rf "$NORA_DIR/.git"
         rm -rf "$NORA_DIR"
         # Additionally wipe the temporary subfolders in SCRIPT_DIR
             for dir in "identities" "json" "ssh"; do
