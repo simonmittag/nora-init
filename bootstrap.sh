@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# prepare machine for nora installation
+# prepare machine for nora bootstrap
 
 set -euo pipefail
 
@@ -295,10 +295,12 @@ init_nora() {
         fi
 
         # 1. Clone the repository manually so we can place identities.json before chezmoi init
-        if [[ ! -d "$NORA_DIR" ]]; then
-            info "Cloning $NORA_REPO to $NORA_DIR..."
-            GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
+        if [[ -d "$NORA_DIR" ]]; then
+            info "Removing existing $NORA_DIR to ensure fresh clone..."
+            rm -rf "$NORA_DIR"
         fi
+        info "Cloning $NORA_REPO to $NORA_DIR..."
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
 
         # 2. Decrypt identities.json
         local age_file="$SCRIPT_DIR/identities/identities.json.age"
@@ -394,17 +396,17 @@ source_bash_environment() {
 }
 
 # --- 9. Cleanup ---
-ask_to_wipe_installation_files() {
+ask_to_wipe_bootstrap_files() {
     # Skip prompt if not running in a terminal
     if [[ ! -t 0 ]]; then
         return 1
     fi
 
-    ask_user "wipe the installation files?" "y"
+    ask_user "wipe the bootstrap files?" "y"
 }
 
-cleanup_installation() {
-    info "Wiping installation files..."
+cleanup_bootstrap() {
+    info "Wiping bootstrap files..."
     if [[ "$NORA_DIR" != "$HOME" && "$NORA_DIR" != "/" ]]; then
         warn "Wiping $NORA_DIR"
         rm -rf "$NORA_DIR"
@@ -436,8 +438,8 @@ main() {
     install_brew_bundle
     source_bash_environment
 
-    if ask_to_wipe_installation_files; then
-        cleanup_installation
+    if ask_to_wipe_bootstrap_files; then
+        cleanup_bootstrap
     fi
 
     success "setup complete - check your new prompt below!"
