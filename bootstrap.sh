@@ -380,6 +380,25 @@ init_nora() {
         warn "Applying nora... You might be prompted to touch your YubiKey."
         # 3. Initialize and apply chezmoi using the prepared source directory
         chezmoi init --apply --source "$NORA_DIR"
+
+        # 4. Explicitly set chezmoi's source directory to NORA_DIR permanently in its config
+        info "Persisting chezmoi source directory to $NORA_DIR..."
+        local config_file="${HOME}/.config/chezmoi/chezmoi.toml"
+        mkdir -p "$(dirname "$config_file")"
+        if ! grep -q "^[[:space:]]*sourceDir[[:space:]]*=" "$config_file" 2>/dev/null; then
+            if [[ -f "$config_file" ]]; then
+                local tmp_config
+                tmp_config=$(mktemp)
+                { printf 'sourceDir = "%s"\n' "$NORA_DIR"; cat "$config_file"; } > "$tmp_config" || error "Failed to update chezmoi config."
+                mv "$tmp_config" "$config_file" || error "Failed to update chezmoi config."
+            else
+                printf 'sourceDir = "%s"\n' "$NORA_DIR" > "$config_file" || error "Failed to create chezmoi config."
+            fi
+        else
+            # Use sed with a pipe separator since $NORA_DIR is a path
+            sed -i '' "s|^[[:space:]]*sourceDir[[:space:]]*=.*|sourceDir = \"$NORA_DIR\"|" "$config_file" || error "Failed to update chezmoi source directory."
+        fi
+        success "chezmoi source directory recorded."
     else
         error "chezmoi is not available even after attempted installation."
     fi
@@ -407,15 +426,7 @@ install_brew_bundle() {
 }
 
 # --- 8. Final Environment Setup ---
-source_bash_environment() {
-    if [[ -f "$HOME/.bash_profile" ]]; then
-        info "Sourcing ~/.bash_profile..."
-        # Note: sourcing it within the script's subshell only affects the script,
-        # but the user's manual step should still be encouraged.
-        # However, the task specifically asked for sourcing.
-        source "$HOME/.bash_profile" || warn "Failed to source ~/.bash_profile"
-    fi
-
+verify_environment() {
     # Verify chezmoi directory is definitely not there
     if [[ -L "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
         success "Verified $CHEZMOI_DEFAULT_DIR_INVALID exists as a symlink."
@@ -468,13 +479,15 @@ main() {
     test_ssh_connection
     init_nora
     install_brew_bundle
-    source_bash_environment
+    verify_environment
 
     if ask_to_wipe_bootstrap_files; then
         cleanup_bootstrap
     fi
 
     success "setup complete - check your new prompt below!"
+    info "Handoff to fresh login shell..."
+    exec bash -l || error "Failed to launch login shell."
 }
 
 main "$@"
