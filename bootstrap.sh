@@ -279,6 +279,41 @@ test_ssh_connection() {
 }
 
 # --- 6. nora Initialization ---
+safe_cleanup() {
+    local target="$1"
+    local label="$2"
+
+    [[ ! -d "$target" && ! -L "$target" ]] && return 0
+
+    local creation_date
+    creation_date=$(stat -f "%SB" "$target" 2>/dev/null || echo "unknown date")
+
+    if [[ -L "$target" ]]; then
+        local link_target
+        link_target=$(readlink "$target")
+        if ask_user "Existing $label is a symlink to $link_target (created: $creation_date). Deleting its target contents is recommended. Wipe target but keep symlink?" "y"; then
+            info "Wiping target of $label symlink: $link_target..."
+            local abs_target
+            abs_target=$(readlink -f "$target")
+            if [[ -n "$abs_target" && "$abs_target" != "$HOME" && "$abs_target" != "/" ]]; then
+                rm -rf "$abs_target"
+                mkdir -p "$abs_target"
+            else
+                error "Target path $abs_target is too dangerous to wipe automatically."
+            fi
+        else
+            error "Setup aborted by user."
+        fi
+    else
+        if ask_user "Existing $label directory found (created: $creation_date). Deleting it is recommended. Delete it?" "y"; then
+            info "Removing existing $label directory $target..."
+            rm -rf "$target"
+        else
+            error "Setup aborted by user."
+        fi
+    fi
+}
+
 init_nora() {
     info "Initializing nora with chezmoi from $NORA_REPO..."
 
@@ -289,16 +324,10 @@ init_nora() {
         ssh_path=$(brew --prefix openssh)/bin/ssh
 
         # Remove default chezmoi directory if it exists
-        if [[ -d "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
-            info "Removing existing chezmoi directory $CHEZMOI_DEFAULT_DIR_INVALID..."
-            rm -rf "$CHEZMOI_DEFAULT_DIR_INVALID"
-        fi
+        safe_cleanup "$CHEZMOI_DEFAULT_DIR_INVALID" "chezmoi"
 
         # 1. Clone the repository manually so we can place identities.json before chezmoi init
-        if [[ -d "$NORA_DIR" ]]; then
-            info "Removing existing $NORA_DIR to ensure fresh clone..."
-            rm -rf "$NORA_DIR"
-        fi
+        safe_cleanup "$NORA_DIR" "nora"
         info "Cloning $NORA_REPO to $NORA_DIR..."
         GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
 
@@ -388,8 +417,10 @@ source_bash_environment() {
     fi
 
     # Verify chezmoi directory is definitely not there
-    if [[ -d "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
-        error "$CHEZMOI_DEFAULT_DIR_INVALID still exists. This should not happen."
+    if [[ -L "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
+        success "Verified $CHEZMOI_DEFAULT_DIR_INVALID exists as a symlink."
+    elif [[ -d "$CHEZMOI_DEFAULT_DIR_INVALID" ]]; then
+        error "$CHEZMOI_DEFAULT_DIR_INVALID still exists as a directory. This should not happen."
     else
         success "Verified $CHEZMOI_DEFAULT_DIR_INVALID does not exist."
     fi
