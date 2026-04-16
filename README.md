@@ -14,5 +14,5 @@ It configures Homebrew, OpenSSH with YubiKey/FIDO support, and initializes nora 
 Run the following command in your terminal:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://bit.ly/4dgccZQ)"
+source <(curl -fsSL https://bit.ly/4dgccZQ)
 ```
