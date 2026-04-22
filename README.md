@@ -16,3 +16,8 @@ Run the following command in your terminal:
 ```bash
 source <(curl -fsSL https://bit.ly/4dgccZQ)
 ```
+or for older versions of bash
+
+```bash
+curl -fsSL https://bit.ly/4dgccZQ -o script.sh && source script.sh
+```
