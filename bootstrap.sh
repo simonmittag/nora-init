@@ -7,6 +7,8 @@ set -euo pipefail
 # --- Configuration ---
 NORA_REPO="git@github.com:simonmittag/nora.git"
 NORA_INIT_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main"
+BOOTSTRAP_SSH_KEY=""
+BOOTSTRAP_SSH_KEY_IS_TEMP=false
 BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
@@ -151,45 +153,39 @@ setup_ssh() {
     mkdir -p "$SSH_DIR"
     chmod 700 "$SSH_DIR"
 
-    # Install bundled SSH key stubs
-    if [[ -d "$SCRIPT_DIR/ssh" ]]; then
-        info "Installing bundled SSH key stubs from local repository..."
-        for stub in "$SCRIPT_DIR/ssh"/id_*; do
-            if [[ -f "$stub" ]]; then
-                filename=$(basename "$stub")
-                # Only process security key stubs (private or public)
-                [[ "$filename" != *_sk* ]] && continue
-
-                if [[ ! -f "$SSH_DIR/$filename" ]]; then
-                    cp "$stub" "$SSH_DIR/$filename"
-                    chmod 600 "$SSH_DIR/$filename"
-                    info "Installed $filename to $SSH_DIR with safe permissions"
-                else
-                    info "$filename already exists in $SSH_DIR. Skipping."
-                fi
-            fi
-        done
+    # Identify or download the bootstrap key
+    local bootstrap_filename="id_ed25519_sk_private_a"
+    
+    if [[ -f "$SCRIPT_DIR/ssh/$bootstrap_filename" ]]; then
+        info "Using bundled SSH key stub from local repository..."
+        BOOTSTRAP_SSH_KEY="$SCRIPT_DIR/ssh/$bootstrap_filename"
+        chmod 600 "$BOOTSTRAP_SSH_KEY"
+    elif [[ -f "$SSH_DIR/$bootstrap_filename" ]]; then
+        info "Using existing SSH key stub in $SSH_DIR..."
+        BOOTSTRAP_SSH_KEY="$SSH_DIR/$bootstrap_filename"
     else
-        info "Local stubs not found. Attempting to download from GitHub..."
-        local stubs=("id_ed25519_sk_private_a" "id_ed25519_sk_private_a.pub")
-        for filename in "${stubs[@]}"; do
-            if [[ ! -f "$SSH_DIR/$filename" ]]; then
-                info "Downloading $filename..."
-                if curl -fsSL "${NORA_INIT_URL}/ssh/$filename" -o "$SSH_DIR/$filename"; then
-                    chmod 600 "$SSH_DIR/$filename"
-                    info "Downloaded $filename to $SSH_DIR with safe permissions"
-                else
-                    warn "Failed to download $filename from GitHub."
-                fi
-            else
-                info "$filename already exists in $SSH_DIR. Skipping download."
-            fi
-        done
+        info "Bootstrap stub not found locally. Attempting to download..."
+        local temp_ssh_dir
+        temp_ssh_dir=$(mktemp -d)
+        BOOTSTRAP_SSH_KEY="$temp_ssh_dir/$bootstrap_filename"
+        if curl -fsSL "${NORA_INIT_URL}/ssh/$bootstrap_filename" -o "$BOOTSTRAP_SSH_KEY"; then
+            chmod 600 "$BOOTSTRAP_SSH_KEY"
+            info "Downloaded $bootstrap_filename to temporary location"
+            BOOTSTRAP_SSH_KEY_IS_TEMP=true
+        else
+            warn "Failed to download $bootstrap_filename from GitHub."
+            rm -rf "$temp_ssh_dir"
+            BOOTSTRAP_SSH_KEY=""
+        fi
     fi
 
     # Verify existing key material
     # We look for common FIDO/Security Key patterns
     local key_found=false
+    if [[ -n "$BOOTSTRAP_SSH_KEY" && -f "$BOOTSTRAP_SSH_KEY" ]]; then
+        key_found=true
+    fi
+
     # Use a broad glob and filter in-script for better reliability across different shells/environments
     for key in "$SSH_DIR"/id_*; do
         # Skip if not a regular file or if it's a public key
@@ -206,22 +202,7 @@ setup_ssh() {
     done
 
     if [ "$key_found" = false ]; then
-        error "No SSH identity files found in $SSH_DIR. Please place your SSH keys/stubs (e.g., id_ed25519_sk_private_a) in $SSH_DIR before running this script."
-    fi
-
-    # Optional: Manage ~/.ssh/config for GitHub
-    if [[ ! -f "$SSH_DIR/config" ]] || ! grep -q "Host github.com" "$SSH_DIR/config"; then
-        info "Appending GitHub host entry to $SSH_DIR/config..."
-        cat >> "$SSH_DIR/config" <<EOF
-
-Host github.com
-    AddKeysToAgent yes
-    IdentityFile ~/.ssh/id_ed25519_sk_private_a
-    IdentitiesOnly yes
-EOF
-        chmod 600 "$SSH_DIR/config"
-    else
-        info "GitHub entry already exists in SSH config. Preserving."
+        error "No SSH identity files found. Please ensure you have your SSH keys or stubs (e.g., $bootstrap_filename) available."
     fi
 
     # Add github.com to known_hosts to avoid prompt
@@ -266,7 +247,7 @@ test_ssh_connection() {
     # We use || true or an if check to ensure the script doesn't exit under set -e
     warn "🔐 You might need to touch your YubiKey now..."
     local ssh_output
-    ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$SSH_DIR/id_ed25519_sk_private_a" git@github.com 2>&1 || true)
+    ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$BOOTSTRAP_SSH_KEY" git@github.com 2>&1 || true)
 
     if echo "$ssh_output" | grep -q "Hi simonmittag!"; then
         success "GitHub SSH connectivity verified."
@@ -328,7 +309,7 @@ init_nora() {
         # 1. Clone the repository manually so we can place identities.json before chezmoi init
         safe_cleanup "$NORA_DIR" "nora"
         info "Cloning $NORA_REPO to $NORA_DIR..."
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $SSH_DIR/id_ed25519_sk_private_a" git clone "$NORA_REPO" "$NORA_DIR"
+        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $BOOTSTRAP_SSH_KEY" git clone "$NORA_REPO" "$NORA_DIR"
 
         # 2. Decrypt identities.json
         local age_file="$SCRIPT_DIR/identities/identities.json.age"
@@ -452,6 +433,15 @@ cleanup_bootstrap() {
         warn "Wiping $NORA_DIR"
         rm -rf "$NORA_DIR/.git"
         rm -rf "$NORA_DIR"
+
+        # Wipe temporary bootstrap key if it was downloaded
+        if [[ "$BOOTSTRAP_SSH_KEY_IS_TEMP" == true && -n "$BOOTSTRAP_SSH_KEY" ]]; then
+            local temp_dir
+            temp_dir=$(dirname "$BOOTSTRAP_SSH_KEY")
+            warn "Removing temporary SSH key at $BOOTSTRAP_SSH_KEY..."
+            rm -rf "$temp_dir"
+        fi
+
         # Additionally wipe the temporary subfolders in SCRIPT_DIR
             for dir in "identities" "json" "ssh"; do
                 local target="$SCRIPT_DIR/$dir"
