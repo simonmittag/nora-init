@@ -24,6 +24,40 @@ error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; exit 1; }
 success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
 
 # --- 1. Preflight Checks ---
+ensure_passwordless_sudo() {
+    # Check if already passwordless
+    if sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
+        return 0
+    fi
+
+    if ! ask_user "Enable passwordless sudo for $USER? (Required for installation)" "y"; then
+        error "Passwordless sudo is required for installation. Setup aborted."
+    fi
+
+    info "Enabling passwordless sudo for $USER. You may be prompted for your password once."
+
+    local sudo_entry="$USER ALL=(ALL) NOPASSWD: ALL"
+
+    # Try using sudoers.d first as it's cleaner and supported on modern macOS
+    if sudo grep -q "^#includedir /etc/sudoers.d" /etc/sudoers 2>/dev/null; then
+        sudo mkdir -p /etc/sudoers.d
+        echo "$sudo_entry" | sudo tee "/etc/sudoers.d/$USER" > /dev/null
+        sudo chmod 440 "/etc/sudoers.d/$USER"
+    else
+        # Fallback to appending to /etc/sudoers
+        if ! sudo grep -q "$sudo_entry" /etc/sudoers 2>/dev/null; then
+            echo "$sudo_entry" | sudo tee -a /etc/sudoers > /dev/null
+        fi
+    fi
+
+    # Verify it worked
+    if sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
+        success "Passwordless sudo enabled."
+    else
+        warn "Could not verify passwordless sudo. You might still be prompted for passwords."
+    fi
+}
+
 ensure_modern_bash() {
     local needs_upgrade=false
 
@@ -105,6 +139,7 @@ ensure_modern_bash() {
 }
 
 check_preflight() {
+    ensure_passwordless_sudo
     ensure_modern_bash
 
     info "Running preflight checks..."
