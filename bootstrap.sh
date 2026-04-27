@@ -537,7 +537,12 @@ test_ssh_connection() {
     # We use || true or an if check to ensure the script doesn't exit under set -e
     warn "🔐 You might need to touch your YubiKey now..."
     local ssh_output
-    ssh_output=$("$ssh_path" -v -T -o StrictHostKeyChecking=yes -i "$BOOTSTRAP_SSH_KEY" git@github.com 2>&1 || true)
+    ssh_output=$("$ssh_path" -v -T \
+        -o IdentityAgent=none \
+        -o IdentitiesOnly=yes \
+        -o StrictHostKeyChecking=yes \
+        -i "$BOOTSTRAP_SSH_KEY" \
+        git@github.com 2>&1 || true)
 
     if echo "$ssh_output" | grep -q "Hi simonmittag!"; then
         success "GitHub SSH connectivity verified."
