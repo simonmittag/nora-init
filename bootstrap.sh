@@ -9,7 +9,7 @@ NORA_REPO="git@github.com:simonmittag/nora.git"
 NORA_INIT_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main"
 BOOTSTRAP_SSH_KEY=""
 BOOTSTRAP_SSH_KEY_IS_TEMP=false
-BREW_PACKAGES=("openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
+BREW_PACKAGES=("bash" "openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
 SSH_DIR="${HOME}/.ssh"
@@ -24,7 +24,89 @@ error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; exit 1; }
 success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
 
 # --- 1. Preflight Checks ---
+ensure_modern_bash() {
+    local needs_upgrade=false
+
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        info "Running in Zsh. Modern Bash (4+) is required."
+        needs_upgrade=true
+    elif [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
+        info "Running in Bash ${BASH_VERSION:-unknown}. Modern Bash (4+) is required."
+        needs_upgrade=true
+    fi
+
+    # Check Homebrew prefix
+    local brew_prefix
+    if command -v brew >/dev/null 2>&1; then
+        brew_prefix=$(brew --prefix)
+    else
+        if [[ -d /opt/homebrew ]]; then
+            brew_prefix="/opt/homebrew"
+        else
+            brew_prefix="/usr/local"
+        fi
+    fi
+
+    local brew_bash="${brew_prefix}/bin/bash"
+
+    if [[ "$needs_upgrade" == "false" ]]; then
+        # Check login shell even if current version is okay
+        local current_login_shell
+        current_login_shell=$(dscl . -read "/Users/$USER" UserShell | awk '{print $2}')
+        if [[ "$current_login_shell" != "$brew_bash" ]]; then
+            info "Modern Bash found but not configured as default login shell."
+            needs_upgrade=true
+        fi
+    fi
+
+    if [[ "$needs_upgrade" == "false" && "$BASH" == "$brew_bash" ]]; then
+        success "Modern Bash is already active and configured."
+        return 0
+    fi
+
+    if [[ "$needs_upgrade" == "true" ]]; then
+        info "Ensuring modern Bash is installed and configured..."
+        ensure_homebrew
+
+        if ! brew list bash >/dev/null 2>&1; then
+            info "Installing modern Bash via Homebrew..."
+            brew install bash
+        fi
+
+        if [[ ! -x "$brew_bash" ]]; then
+            error "Homebrew Bash not found at $brew_bash"
+        fi
+
+        # Add to /etc/shells if missing
+        if ! grep -Fxq "$brew_bash" /etc/shells; then
+            info "Adding $brew_bash to /etc/shells. sudo access required."
+            echo "$brew_bash" | sudo tee -a /etc/shells > /dev/null
+        fi
+
+        # Change login shell
+        local current_login_shell
+        current_login_shell=$(dscl . -read "/Users/$USER" UserShell | awk '{print $2}')
+        if [[ "$current_login_shell" != "$brew_bash" ]]; then
+            info "Changing login shell to $brew_bash. sudo access required."
+            sudo chsh -s "$brew_bash" "$USER"
+        fi
+    fi
+
+    # Re-execution logic
+    if [[ "$BASH" != "$brew_bash" ]]; then
+        info "Re-executing script with modern Bash..."
+        if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+            exec "$brew_bash" "${BASH_SOURCE[0]}" "$@"
+        else
+            info "Script piped or BASH_SOURCE missing. Re-downloading from ${NORA_INIT_URL}/bootstrap.sh..."
+            exec bash -c "curl -fsSL ${NORA_INIT_URL}/bootstrap.sh | $brew_bash -s -- \"\$@\"" -- "bootstrap.sh" "$@"
+        fi
+    fi
+}
+
 check_preflight() {
+    ensure_modern_bash
+
     info "Running preflight checks..."
     
     # OS Detection
@@ -119,20 +201,39 @@ ask_to_continue() {
 }
 
 # --- 3. Homebrew Setup ---
-setup_homebrew() {
+ensure_homebrew() {
+    # 1. Try to find brew in standard locations if not in PATH
+    if ! command -v brew >/dev/null 2>&1; then
+        if [[ -x /opt/homebrew/bin/brew ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -x /usr/local/bin/brew ]]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+    fi
+
+    # 2. If still not found, install it
     if ! command -v brew >/dev/null 2>&1; then
         info "Homebrew not found. Installing..."
         NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         
-        # Add brew to PATH for the current session (for M1/M2 Macs)
-        if [[ -f /opt/homebrew/bin/brew ]]; then
+        # Try to load it again after installation
+        if [[ -x /opt/homebrew/bin/brew ]]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
-        elif [[ -f /usr/local/bin/brew ]]; then
+        elif [[ -x /usr/local/bin/brew ]]; then
             eval "$(/usr/local/bin/brew shellenv)"
         fi
-    else
-        info "Homebrew is already installed."
     fi
+
+    # 3. Final check and ensure environment is loaded
+    if command -v brew >/dev/null 2>&1; then
+        eval "$(brew shellenv)"
+    else
+        error "Homebrew installation failed or could not be found."
+    fi
+}
+
+setup_homebrew() {
+    ensure_homebrew
 
     info "Installing dependencies: ${BREW_PACKAGES[*]}"
     # brew update # Skip brew update to avoid potential git errors in non-standard envs during bootstrap
