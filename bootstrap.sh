@@ -23,6 +23,11 @@ warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
 error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; exit 1; }
 success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
 
+# --- OS Check ---
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    error "This script is only supported on macOS."
+fi
+
 # --- 1. Preflight Checks ---
 ensure_passwordless_sudo() {
     # Check if already passwordless
@@ -203,15 +208,11 @@ ensure_computer_identity() {
 }
 
 check_preflight() {
+    info "Running preflight checks..."
+
     ensure_passwordless_sudo
     ensure_command_line_tools
     ensure_modern_bash
-
-    info "Running preflight checks..."
-
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-        error "This script is only supported on macOS."
-    fi
 
     command -v curl >/dev/null 2>&1 || error "curl is missing. Please install it."
 
@@ -413,6 +414,17 @@ brew_bash() {
     printf '%s\n' "$bash_path"
 }
 
+brew_ssh() {
+    local ssh_path
+    ssh_path="$(brew --prefix openssh)/bin/ssh"
+
+    if [[ ! -x "$ssh_path" ]]; then
+        error "Homebrew OpenSSH not found at $ssh_path"
+    fi
+
+    printf '%s\n' "$ssh_path"
+}
+
 # --- 3. SSH Setup ---
 setup_ssh() {
     info "Setting up SSH directory and permissions..."
@@ -473,9 +485,20 @@ setup_ssh() {
     fi
 
     # Add github.com to known_hosts to avoid prompt
-    if ! ssh-keygen -F github.com >/dev/null 2>&1; then
+    local ssh_keygen_path ssh_keyscan_path
+    ssh_keygen_path="$(brew --prefix openssh)/bin/ssh-keygen"
+    ssh_keyscan_path="$(brew --prefix openssh)/bin/ssh-keyscan"
+
+    if [[ ! -x "$ssh_keygen_path" ]]; then
+        error "Homebrew ssh-keygen not found at $ssh_keygen_path"
+    fi
+    if [[ ! -x "$ssh_keyscan_path" ]]; then
+        error "Homebrew ssh-keyscan not found at $ssh_keyscan_path"
+    fi
+
+    if ! "$ssh_keygen_path" -F github.com >/dev/null 2>&1; then
         info "Adding github.com to ~/.ssh/known_hosts..."
-        ssh-keyscan -H github.com >> "$SSH_DIR/known_hosts" 2>/dev/null
+        "$ssh_keyscan_path" -H github.com >> "$SSH_DIR/known_hosts" 2>/dev/null
         chmod 600 "$SSH_DIR/known_hosts"
     fi
 }
@@ -496,7 +519,7 @@ validate_yubikey() {
     # Check OpenSSH FIDO capability
     # Brew-installed openssh is usually at /opt/homebrew/bin/ssh (Silicon) or /usr/local/bin/ssh (Intel)
     local ssh_bin
-    ssh_bin=$(brew --prefix openssh)/bin/ssh
+    ssh_bin="$(brew_ssh)"
     if ! "$ssh_bin" -Q key | grep -q "sk"; then
         error "🔐 OpenSSH ($ssh_bin) does not seem to support security keys (FIDO). Ensure you are using the Homebrew version of OpenSSH."
     fi
@@ -508,7 +531,7 @@ validate_yubikey() {
 test_ssh_connection() {
     info "Testing SSH connectivity to GitHub..."
     local ssh_path
-    ssh_path=$(brew --prefix openssh)/bin/ssh
+    ssh_path="$(brew_ssh)"
 
     # Try to connect to GitHub. Exit code 1 is expected for successful auth but no shell.
     # We use || true or an if check to ensure the script doesn't exit under set -e
@@ -568,7 +591,7 @@ init_nora() {
         # Use the brew-installed chezmoi
         # Ensure we use the Homebrew SSH for the git clone
         local ssh_path
-        ssh_path=$(brew --prefix openssh)/bin/ssh
+        ssh_path="$(brew_ssh)"
 
         # Remove default chezmoi directory if it exists
         safe_cleanup "$CHEZMOI_DEFAULT_DIR_INVALID" "chezmoi"
@@ -732,8 +755,8 @@ main() {
 
     check_preflight
     ask_to_continue
-    setup_ssh
     setup_homebrew
+    setup_ssh
     validate_yubikey
     test_ssh_connection
     init_nora
