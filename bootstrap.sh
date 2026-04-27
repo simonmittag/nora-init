@@ -138,6 +138,50 @@ ensure_modern_bash() {
     fi
 }
 
+ensure_computer_identity() {
+    local comp_name host_name local_host_name
+    
+    info "Checking Computer Identity..."
+
+    while true; do
+        comp_name=$(scutil --get ComputerName)
+        host_name=$(scutil --get HostName 2>/dev/null || echo "")
+        local_host_name=$(scutil --get LocalHostName)
+
+        info "ComputerName:  \033[90m$comp_name\033[0m"
+        info "HostName:      \033[90m${host_name:-not set}\033[0m"
+        info "LocalHostName: \033[90m$local_host_name\033[0m"
+
+        if [[ "$comp_name" != "$host_name" || "$comp_name" != "$local_host_name" ]]; then
+            warn "Computer identity settings are not identical."
+            local new_name=""
+            ask_user_string "Enter a unified name for this computer" new_name
+            
+            info "Setting ComputerName, HostName, and LocalHostName to '$new_name'..."
+            sudo scutil --set ComputerName "$new_name"
+            sudo scutil --set HostName "$new_name"
+            sudo scutil --set LocalHostName "$new_name"
+            
+            # Re-fetch values to show they are aligned
+            comp_name=$(scutil --get ComputerName)
+        fi
+
+        if ask_user "Confirm Computer Identity: \033[90m$comp_name\033[0m?" "y"; then
+            success "Computer identity confirmed."
+            break
+        else
+            # User wants to change it
+            local new_name=""
+            ask_user_string "Enter a new unified name for this computer" new_name
+            info "Updating Computer Identity to '$new_name'..."
+            sudo scutil --set ComputerName "$new_name"
+            sudo scutil --set HostName "$new_name"
+            sudo scutil --set LocalHostName "$new_name"
+            # Loop will re-display and ask for confirmation
+        fi
+    done
+}
+
 check_preflight() {
     ensure_passwordless_sudo
     ensure_modern_bash
@@ -153,10 +197,57 @@ check_preflight() {
     command -v curl >/dev/null 2>&1 || error "curl is missing. Please install it."
     command -v git >/dev/null 2>&1 || error "git is missing. Please install it."
 
+    ensure_computer_identity
+
     success "Preflight checks passed."
 }
 
 # --- 2. User Confirmation ---
+ask_user_string() {
+    local message="$1"
+    local var_name="$2"
+    local prompt_hint="\033[1;32m>\033[0m \033[90mtype name\033[0m"
+
+    warn "$message"
+    local input=""
+    echo -ne "$prompt_hint\033[9D"
+
+    while true; do
+        if read -rsn 1 key; then
+            # Handle Enter
+            if [[ -z "$key" ]]; then
+                if [[ -n "$input" ]]; then
+                    echo -ne "\r\033[K" # Clear line
+                    eval "$var_name=\"\$input\""
+                    return 0
+                fi
+                continue
+            fi
+
+            # Handle Backspace
+            if [[ $key == $'\x7f' || $key == $'\b' ]]; then
+                if [[ -n "$input" ]]; then
+                    input="${input%?}"
+                    echo -ne "\r\033[K\033[1;32m>\033[0m $input"
+                fi
+                if [[ -z "$input" ]]; then
+                    echo -ne "\r\033[K$prompt_hint\033[9D"
+                fi
+                continue
+            fi
+
+            # Add character
+            if [[ "$key" =~ [[:print:]] ]]; then
+                if [[ -z "$input" ]]; then
+                    echo -ne "\r\033[K\033[1;32m>\033[0m "
+                fi
+                input+="$key"
+                echo -ne "$key"
+            fi
+        fi
+    done
+}
+
 ask_user() {
     local message="$1"
     local default="${2:-n}" # default to 'n'
