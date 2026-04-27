@@ -153,7 +153,7 @@ ensure_modern_bash() {
             exec "$brew_bash" "${BASH_SOURCE[0]}" "$@"
         else
             info "Script piped or BASH_SOURCE missing. Re-downloading from ${NORA_INIT_URL}/bootstrap.sh..."
-            exec bash -c "curl -fsSL ${NORA_INIT_URL}/bootstrap.sh | $brew_bash -s -- \"\$@\"" -- "bootstrap.sh" "$@"
+            exec "$brew_bash" -c "curl -fsSL ${NORA_INIT_URL}/bootstrap.sh | $brew_bash -s -- \"\$@\"" -- "bootstrap.sh" "$@"
         fi
     fi
 }
@@ -400,6 +400,17 @@ brew_git() {
     fi
 
     printf '%s\n' "$git_path"
+}
+
+brew_bash() {
+    local bash_path
+    bash_path="$(brew --prefix bash)/bin/bash"
+
+    if [[ ! -x "$bash_path" ]]; then
+        error "Homebrew Bash not found at $bash_path"
+    fi
+
+    printf '%s\n' "$bash_path"
 }
 
 # --- 3. SSH Setup ---
@@ -735,7 +746,9 @@ main() {
 
     success "setup complete - check your new prompt below!"
     info "Handoff to fresh login shell..."
-    exec bash -l || error "Failed to launch login shell."
+    local bash_path
+    bash_path="$(brew_bash)"
+    exec "$bash_path" -l || error "Failed to launch login shell."
 }
 
 main "$@"
