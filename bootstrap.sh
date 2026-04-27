@@ -9,7 +9,7 @@ NORA_REPO="git@github.com:simonmittag/nora.git"
 NORA_INIT_URL="https://raw.githubusercontent.com/simonmittag/nora-init/main"
 BOOTSTRAP_SSH_KEY=""
 BOOTSTRAP_SSH_KEY_IS_TEMP=false
-BREW_PACKAGES=("bash" "openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
+BREW_PACKAGES=("bash" "git" "openssh" "libfido2" "ykman" "chezmoi" "age" "age-plugin-yubikey")
 # Ensure HOME is set (Bash -u safety)
 export HOME="${HOME:-$(eval echo ~$(whoami))}"
 SSH_DIR="${HOME}/.ssh"
@@ -56,6 +56,26 @@ ensure_passwordless_sudo() {
     else
         warn "Could not verify passwordless sudo. You might still be prompted for passwords."
     fi
+}
+
+ensure_command_line_tools() {
+    if xcode-select -p >/dev/null 2>&1; then
+        success "Apple Command Line Tools are installed."
+        return 0
+    fi
+
+    warn "Apple Command Line Tools are required once on a fresh Mac."
+    warn "macOS will now open the Apple installer."
+    warn "Complete installation, then rerun Nora bootstrap."
+
+    if [[ -t 0 ]]; then
+        xcode-select --install 2>/dev/null || true
+        info "After installation completes, rerun the Nora bootstrap command."
+    else
+        warn "Non-interactive shell detected; cannot reliably launch GUI installer."
+    fi
+
+    error "Finish Apple Command Line Tools installation, then rerun bootstrap."
 }
 
 ensure_modern_bash() {
@@ -184,18 +204,16 @@ ensure_computer_identity() {
 
 check_preflight() {
     ensure_passwordless_sudo
+    ensure_command_line_tools
     ensure_modern_bash
 
     info "Running preflight checks..."
-    
-    # OS Detection
+
     if [[ "$OSTYPE" != "darwin"* ]]; then
         error "This script is only supported on macOS."
     fi
 
-    # Ensure curl and git
     command -v curl >/dev/null 2>&1 || error "curl is missing. Please install it."
-    command -v git >/dev/null 2>&1 || error "git is missing. Please install it."
 
     ensure_computer_identity
 
@@ -373,6 +391,17 @@ setup_homebrew() {
     done
 }
 
+brew_git() {
+    local git_path
+    git_path="$(brew --prefix git)/bin/git"
+
+    if [[ ! -x "$git_path" ]]; then
+        error "Homebrew Git not found at $git_path"
+    fi
+
+    printf '%s\n' "$git_path"
+}
+
 # --- 3. SSH Setup ---
 setup_ssh() {
     info "Setting up SSH directory and permissions..."
@@ -536,7 +565,10 @@ init_nora() {
         # 1. Clone the repository manually so we can place identities.json before chezmoi init
         safe_cleanup "$NORA_DIR" "nora"
         info "Cloning $NORA_REPO to $NORA_DIR..."
-        GIT_SSH_COMMAND="$ssh_path -o IdentitiesOnly=yes -i $BOOTSTRAP_SSH_KEY" git clone "$NORA_REPO" "$NORA_DIR"
+        local git_path
+        git_path="$(brew_git)"
+        GIT_SSH_COMMAND="$ssh_path -o IdentityAgent=none -o IdentitiesOnly=yes -i $BOOTSTRAP_SSH_KEY" \
+            "$git_path" clone "$NORA_REPO" "$NORA_DIR"
 
         # 2. Decrypt identities.json
         local age_file="$SCRIPT_DIR/identities/identities.json.age"
