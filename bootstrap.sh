@@ -30,8 +30,8 @@ fi
 
 # --- 1. Preflight Checks ---
 ensure_passwordless_sudo() {
-    # Check if already passwordless
-    if sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
+    if sudo -n true 2>/dev/null; then
+        success "Passwordless sudo already active."
         return 0
     fi
 
@@ -41,25 +41,47 @@ ensure_passwordless_sudo() {
 
     info "Enabling passwordless sudo for $USER. You may be prompted for your password once."
 
-    local sudo_entry="$USER ALL=(ALL) NOPASSWD: ALL"
+    local sudoers="/private/etc/sudoers"
+    local begin="# BEGIN NORA BOOTSTRAP"
+    local end="# END NORA BOOTSTRAP"
+    local entry="$USER ALL=(ALL) NOPASSWD: ALL"
 
-    # Try using sudoers.d first as it's cleaner and supported on modern macOS
-    if sudo grep -q "^#includedir /etc/sudoers.d" /etc/sudoers 2>/dev/null; then
-        sudo mkdir -p /etc/sudoers.d
-        echo "$sudo_entry" | sudo tee "/etc/sudoers.d/$USER" > /dev/null
-        sudo chmod 440 "/etc/sudoers.d/$USER"
+    local tmp backup
+    tmp="$(mktemp)"
+    backup="$(mktemp)"
+
+    sudo cp "$sudoers" "$backup"
+
+    sudo awk -v begin="$begin" -v end="$end" '
+        $0 == begin { skip=1; next }
+        $0 == end { skip=0; next }
+        skip != 1 { print }
+    ' "$sudoers" > "$tmp"
+
+    {
+        printf "\n%s\n" "$begin"
+        printf "%s\n" "$entry"
+        printf "%s\n" "$end"
+    } >> "$tmp"
+
+    chmod 440 "$tmp"
+
+    if sudo visudo -cf "$tmp" >/dev/null; then
+        sudo cp "$tmp" "$sudoers"
+        sudo chmod 440 "$sudoers"
     else
-        # Fallback to appending to /etc/sudoers
-        if ! sudo grep -q "$sudo_entry" /etc/sudoers 2>/dev/null; then
-            echo "$sudo_entry" | sudo tee -a /etc/sudoers > /dev/null
-        fi
+        sudo cp "$backup" "$sudoers"
+        sudo chmod 440 "$sudoers"
+        rm -f "$tmp" "$backup"
+        error "sudoers validation failed; restored original sudoers file."
     fi
 
-    # Verify it worked
-    if sudo -n -l 2>/dev/null | grep -q "NOPASSWD: ALL"; then
+    rm -f "$tmp" "$backup"
+
+    if sudo -n true 2>/dev/null; then
         success "Passwordless sudo enabled."
     else
-        warn "Could not verify passwordless sudo. You might still be prompted for passwords."
+        error "Passwordless sudo change was applied but did not take effect."
     fi
 }
 
