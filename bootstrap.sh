@@ -569,7 +569,15 @@ safe_cleanup() {
         if ask_user "Existing $label is a symlink to $link_target (created: $creation_date). Deleting its target contents is recommended. Wipe target but keep symlink?" "y"; then
             info "Wiping target of $label symlink: $link_target..."
             local abs_target
-            abs_target=$(readlink -f "$target")
+            abs_target=""
+            if abs_target=$(readlink -f "$target" 2>/dev/null); then
+                :
+            elif command -v realpath >/dev/null 2>&1; then
+                abs_target=$(realpath "$target" 2>/dev/null || echo "")
+            elif command -v python3 >/dev/null 2>&1; then
+                abs_target=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target" 2>/dev/null || echo "")
+            fi
+
             if [[ -n "$abs_target" && "$abs_target" != "$HOME" && "$abs_target" != "/" ]]; then
                 rm -rf "$abs_target"
                 mkdir -p "$abs_target"
